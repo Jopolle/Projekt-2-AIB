@@ -85,11 +85,15 @@ namespace ahuRegulator
         cRegulatorPI RegPI = new cRegulatorPI();
 
 
-        bool wymagany_reset = false;
+        bool wymagany_reset = false;                        //zmienna wymuszajaca wlaczenie pracy jeszcze raz przez uzytkownika
 
         //Procedura przeciwzamrozeniowa nagrzewnicy wodnej
         double czas_od_zaniku_nagrz = 0;
         bool procedura_nagrz_trwa = false;
+
+        //Procedura przeciwzamrozeniowa wymmienika
+        double czas_od_zaniku_wym = 0;
+        bool procedura_wym_trwa = false;
 
 
 
@@ -122,7 +126,7 @@ namespace ahuRegulator
 
             bool boStart = DaneWejsciowe.Czytaj(eZmienne.PracaCentrali) > 0;                                                //sygnal startu
             bool procedura_nagrzewnica = DaneWejsciowe.Czytaj(eZmienne.TermostatPZamrNagrzewnicyWodnej) > 0;                //termostat nagrzewnicy wodnej
-
+            bool procedura_wymiennik = DaneWejsciowe.Czytaj(eZmienne.TempZaOdzyskiem_C) < 5;                                //zabezpieczenie wymmienika krzyzowego
 
             // algorytm sterowania
             double y_nagrz = 0;
@@ -130,127 +134,187 @@ namespace ahuRegulator
 
 
 
-            if (procedura_nagrzewnica && StanPracyCentrali != eStanyPracyCentrali.AlarmNagrzewnicy) //zabezpieczenie zeby nie skakać miedzy dwoma stanami non stop
+            if (procedura_nagrzewnica && StanPracyCentrali != eStanyPracyCentrali.AlarmNagrzewnicy)
             {
                 StanPracyCentrali = eStanyPracyCentrali.AlarmNagrzewnicy;
                 czas_od_zaniku_nagrz = 0;
             }
+            else if (procedura_wymiennik
+                     && StanPracyCentrali != eStanyPracyCentrali.AlarmNagrzewnicy && StanPracyCentrali != eStanyPracyCentrali.AlarmWymiennika)
+            {
+                StanPracyCentrali = eStanyPracyCentrali.AlarmWymiennika;
+                czas_od_zaniku_wym = 0;
+            }
+
+
 
 
 
             switch (StanPracyCentrali)
-            {
-                case eStanyPracyCentrali.Stop:
-                    {
-                        y_nagrz = 0;
-                        DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
-                        boPracaWentylatoraNawiewu = false;
-                        if(!boStart)
-                        {
-                            wymagany_reset = false;
-                        }
-
-                        if(boStart & !wymagany_reset)
-                        {
-                            CzasOdStartu = 0;
-                            StanPracyCentrali = eStanyPracyCentrali.RozruchWentylatora;
-                           
-                        }
-                        break;
-                    }
-                case eStanyPracyCentrali.RozruchWentylatora:
-                    {
-                        boPracaWentylatoraNawiewu = true;
-
-                        if (CzasOdStartu < OpoznienieZalaczeniaNagrzewnicy_s)
+                {
+                    case eStanyPracyCentrali.Stop:
                         {
                             y_nagrz = 0;
-                            CzasOdStartu += Ts;
-                        }
-                        else
-                        {
-                            StanPracyCentrali = eStanyPracyCentrali.Praca;
-                            y_nagrz = RegPI.Wyjscie(t_zad - t_pom);
-                        }
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, 0);
+                            boPracaWentylatoraNawiewu = false;
+                            if (!boStart)
+                            {
+                                wymagany_reset = false;
+                            }
 
+                            if (boStart & !wymagany_reset)
+                            {
+                                CzasOdStartu = 0;
+                                StanPracyCentrali = eStanyPracyCentrali.RozruchWentylatora;
 
-                        break;
-                    }
-                case eStanyPracyCentrali.Praca:
-                    {
-                        boPracaWentylatoraNawiewu = true;
-
-                        if (!boStart)
-                        {
-                            y_nagrz = 0;
-                            StanPracyCentrali = eStanyPracyCentrali.WychladzanieNagrzewnicy;
+                            }
+                            break;
                         }
-                        else
+                    case eStanyPracyCentrali.RozruchWentylatora:
                         {
-                            y_nagrz = RegPI.Wyjscie(t_zad - t_pom);
-                        }
-                        
-                        break;
-                    }
-                case eStanyPracyCentrali.WychladzanieNagrzewnicy:
-                    {
-                        if (CzasOdStopu < OpoznienieWylaczeniaWentylatora_s)
-                        {
-                            CzasOdStopu += Ts;
-                            y_nagrz = 0;
                             boPracaWentylatoraNawiewu = true;
+
+                            if (CzasOdStartu < OpoznienieZalaczeniaNagrzewnicy_s)
+                            {
+                                y_nagrz = 0;
+                                CzasOdStartu += Ts;
+                            }
+                            else
+                            {
+                                StanPracyCentrali = eStanyPracyCentrali.Praca;
+                                y_nagrz = RegPI.Wyjscie(t_zad - t_pom);
+                            }
+
+
+                            break;
+                        }
+                    case eStanyPracyCentrali.Praca:
+                        {
+                            boPracaWentylatoraNawiewu = true;
+
+                            if (!boStart)
+                            {
+                                y_nagrz = 0;
+                                StanPracyCentrali = eStanyPracyCentrali.WychladzanieNagrzewnicy;
+                            }
+                            else
+                            {
+                                y_nagrz = RegPI.Wyjscie(t_zad - t_pom);
+                            }
+
+                            break;
+                        }
+                    case eStanyPracyCentrali.WychladzanieNagrzewnicy:
+                        {
+                            if (CzasOdStopu < OpoznienieWylaczeniaWentylatora_s)
+                            {
+                                CzasOdStopu += Ts;
+                                y_nagrz = 0;
+                                boPracaWentylatoraNawiewu = true;
+                            }
+                            else
+                            {
+                                StanPracyCentrali = eStanyPracyCentrali.Stop;
+                                y_nagrz = 0;
+                                boPracaWentylatoraNawiewu = true;
+                            }
+
+                            break;
+                        }
+
+                    case eStanyPracyCentrali.AlarmNagrzewnicy:
+                        {
+
+                            wymagany_reset = true;
+
+                        //Dodatkowe sprawdzenie czy jednoczesnie nie wlaczyla sie ochrona wymiennika bo to ze soba nie koliduje
+                        if (procedura_wymiennik)
+                        {
+                            
+                            DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, 100);
                         }
                         else
                         {
-                            StanPracyCentrali = eStanyPracyCentrali.Stop;
-                            y_nagrz = 0;
-                            boPracaWentylatoraNawiewu = true;
+                            DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, 0);
                         }
-
-                        break;
-                    }
-
-                case eStanyPracyCentrali.AlarmNagrzewnicy:
-                    {
-
-                        wymagany_reset = true;
 
                         if (procedura_nagrzewnica)
-                        {
-                            y_nagrz = 100;
-                            boPracaWentylatoraNawiewu = false;
-                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1);
-                            czas_od_zaniku_nagrz = 0;
-                            procedura_nagrz_trwa = true;
-                        }
-                        else
-                        {
-
-                            if(procedura_nagrz_trwa)
                             {
-                                czas_od_zaniku_nagrz += Ts;
-                                    
-                                if (czas_od_zaniku_nagrz > 5)
+                                y_nagrz = 100;
+                                boPracaWentylatoraNawiewu = false;
+                                DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1);
+                                czas_od_zaniku_nagrz = 0;
+                                procedura_nagrz_trwa = true;
+                            }
+                            else
+                            {
+
+                                if (procedura_nagrz_trwa)
                                 {
-                                    procedura_nagrz_trwa = false;
-                                    StanPracyCentrali = eStanyPracyCentrali.Stop;
+                                    czas_od_zaniku_nagrz += Ts;
+
+                                    if (czas_od_zaniku_nagrz > 5)
+                                    {
+                                        procedura_nagrz_trwa = false;
+                                        StanPracyCentrali = eStanyPracyCentrali.Stop;
+
+                                    }
 
                                 }
 
+                                y_nagrz = 100;
+                                boPracaWentylatoraNawiewu = false;
+                                DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1);
+
                             }
 
-                            y_nagrz = 100;
-                            boPracaWentylatoraNawiewu = false;
-                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1);
+                            break;
+                        }
+                    case eStanyPracyCentrali.AlarmWymiennika:
+                        {
 
+                        wymagany_reset = true;
+
+                        if (procedura_wymiennik)
+                        {
+                            
+                            DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, 100);
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieChlodnicy_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZezwolenieNaPraceWentylatoraNawiewu, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
+
+                            czas_od_zaniku_wym = 0;
+                            procedura_wym_trwa = true;
+                        }
+                        else
+                        {
+                            
+                            if (procedura_wym_trwa)
+                            {
+                                czas_od_zaniku_wym += Ts;
+
+                                if (czas_od_zaniku_wym > 5)
+                                {
+                                    procedura_wym_trwa = false;
+                                    StanPracyCentrali = eStanyPracyCentrali.Stop;
+                                }
+                            }
+
+                            
+                            DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, 100);
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieChlodnicy_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZezwolenieNaPraceWentylatoraNawiewu, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
                         }
 
-                            break;
+                        break;
                     }
 
 
-
-            }
+                }
 
 
 
