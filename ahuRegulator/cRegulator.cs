@@ -95,7 +95,7 @@ namespace ahuRegulator
         // ********* zmienne definiowane przez studenta
 
         cRegulatorPI RegPI = new cRegulatorPI();
-
+        cRegulatorPI RegPI2 = new cRegulatorPI();
 
         bool wymagany_reset = false;
 
@@ -136,15 +136,21 @@ namespace ahuRegulator
             double t_naw = DaneWejsciowe.Czytaj(eZmienne.TempNawiewu_C);                                                    //temperatura nawiewu
             double t_wyw = DaneWejsciowe.Czytaj(eZmienne.TempWywiewu_C);                                                    //temperatura wywiewu
 
+
+
+
             bool boStart = DaneWejsciowe.Czytaj(eZmienne.PracaCentrali) > 0;                                                //sygnal startu
             bool procedura_nagrzewnica = DaneWejsciowe.Czytaj(eZmienne.TermostatPZamrNagrzewnicyWodnej) > 0;                //termostat nagrzewnicy wodnej
 
 
             // algorytm sterowania
             double y_nagrz = 0;
+            double y_bypass = 0;
+            double y_chlodnica = 0;
+
             bool boPracaWentylatoraNawiewu = false;
 
-
+            double t_naw_zad = 0;
 
             if (procedura_nagrzewnica && StanPracyCentrali != eStanyPracyCentrali.AlarmNagrzewnicy) //zabezpieczenie zeby nie skakać miedzy dwoma stanami non stop
             {
@@ -199,14 +205,98 @@ namespace ahuRegulator
                         if (!boStart)
                         {
                             y_nagrz = 0;
+                            y_chlodnica = 0;
+                            y_bypass = 0;
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
                             StanPracyCentrali = eStanyPracyCentrali.WychladzanieNagrzewnicy;
                         }
                         else
                         {
-                            y_nagrz = RegPI.Wyjscie(t_zad - t_pom);
-                            //if()
+                            switch (TypPracyCentrali)
+                            {
+                                case eStanyPracyCentrali.Praca_jalowa:
+                                    {
+                                        
+                                        y_nagrz = 0;
+                                        y_chlodnica = 0;
+                                        y_bypass = 1; 
+                                        DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0); // Pompa wyłączona
+
+                                        break;
+                                    }
+                                case eStanyPracyCentrali.Praca_grzanie:
+                                    {
+
+                                        t_naw_zad = RegPI.Wyjscie(t_zad - t_pom);
+
+
+                                        t_naw_zad = Math.Max(TempGrzania, Math.Min(40, t_naw_zad));
+
+
+                                        y_nagrz = RegPI2.Wyjscie(t_naw_zad - t_naw);
+                                        y_nagrz = Math.Max(0, Math.Min(1, y_nagrz)); // Ogranicz wyjście do zakresu 0-1
+
+                                        y_chlodnica = 0; 
+                                        y_bypass = 0;   
+                                        DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1); // Pompa włączona
+                                        break;
+                                    }
+                                case eStanyPracyCentrali.Praca_chlodzenie:
+                                    {
+
+                                        t_naw_zad = RegPI.Wyjscie(t_zad - t_pom);
+
+                                        // Ograniczenie temperatury zadanej nawiewu dla chłodzenia (np. 12-30 C)
+                                        t_naw_zad = Math.Min(TempChlodzenia, Math.Max(12, t_naw_zad));
+
+                                        // Regulator podrzędny (RegPI2) reguluje temperaturę nawiewu (t_naw) do zadanej (t_naw_zad)
+                                        // i steruje chłodnicą (y_chlodnica).
+                                        y_chlodnica = RegPI2.Wyjscie(t_naw_zad - t_naw);
+                                        y_chlodnica = Math.Max(0, Math.Min(1, y_chlodnica)); // Ogranicz wyjście do zakresu 0-1
+
+                                        y_nagrz = 0; // Nagrzewnica wyłączona
+                                        y_bypass = 0;    // Bypass zamknięty
+                                        DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0); // Pompa wyłączona
+                                        break;
+                                    }
+                                case eStanyPracyCentrali.Praca_odzyskciepla:
+                                    {
+
+                                        t_naw_zad = RegPI.Wyjscie(t_zad - t_pom);
+
+                                        // Ograniczenie temperatury zadanej nawiewu dla odzysku ciepła
+                                        t_naw_zad = Math.Max(TempGrzania, Math.Min(40, t_naw_zad));
+
+
+                                        double bypass_raw_output = RegPI2.Wyjscie(t_naw_zad - t_naw);
+                                        y_bypass = 1 - bypass_raw_output; // Odwrócenie sygnału dla sterowania bypassem
+                                        y_bypass = Math.Max(0, Math.Min(1, y_bypass)); // Ogranicz wyjście do zakresu 0-1
+
+                                        y_nagrz = 0;     // Nagrzewnica wyłączona
+                                        y_chlodnica = 0; // Chłodnica wyłączona
+                                        DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0); // Pompa wyłączona
+                                        break;
+                                    }
+                                case eStanyPracyCentrali.Praca_odzyskchlodu:
+                                    {
+
+                                        t_naw_zad = RegPI.Wyjscie(t_zad - t_pom);
+
+                                        // Ograniczenie temperatury zadanej nawiewu dla odzysku chłodu
+                                        t_naw_zad = Math.Min(TempChlodzenia, Math.Max(12, t_naw_zad));
+
+
+                                        double bypass_raw_output = RegPI2.Wyjscie(t_naw_zad - t_naw);
+                                        y_bypass = 1 - bypass_raw_output; // Odwrócenie sygnału dla sterowania bypassem
+                                        y_bypass = Math.Max(0, Math.Min(1, y_bypass)); // Ogranicz wyjście do zakresu 0-1
+
+                                        y_nagrz = 0;     // Nagrzewnica wyłączona
+                                        y_chlodnica = 0; // Chłodnica wyłączona
+                                        DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0); // Pompa wyłączona
+                                        break;
+                                    }
+                            }
                         }
-                        
                         break;
                     }
                 case eStanyPracyCentrali.WychladzanieNagrzewnicy:
@@ -269,6 +359,7 @@ namespace ahuRegulator
                 case eStanyPracyCentrali.ProceduraPrzeciwzamrozeniowa:
                     break;
                 
+                
 
 
 
@@ -278,6 +369,9 @@ namespace ahuRegulator
 
             // ustawienie wyjść
             DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, y_nagrz);
+            DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, y_bypass);
+            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieChlodnicy_pr, y_chlodnica);
+
             DaneWyjsciowe.Zapisz(eZmienne.ZezwolenieNaPraceWentylatoraNawiewu, boPracaWentylatoraNawiewu);
 
 
