@@ -51,13 +51,9 @@ namespace ahuRegulator
 
         }
 
-
     }
 
-
-
     #endregion
-
 
     /// <summary>
     /// przykładowe stany pracy centrali - do zmiany podkądem właściwego projektu
@@ -68,7 +64,8 @@ namespace ahuRegulator
         Praca = 1,
         RozruchWentylatora = 2,
         WychladzanieNagrzewnicy = 3,
-        AlarmNagrzewnicy = 4
+        AlarmNagrzewnicy = 4,
+        AlarmWymiennika = 5
 
     }
 
@@ -86,6 +83,13 @@ namespace ahuRegulator
         // ********* zmienne definiowane przez studenta
 
         cRegulatorPI RegPI = new cRegulatorPI();
+
+
+        bool wymagany_reset = false;
+
+        //Procedura przeciwzamrozeniowa nagrzewnicy wodnej
+        double czas_od_zaniku_nagrz = 0;
+        bool procedura_nagrz_trwa = false;
 
 
 
@@ -108,17 +112,29 @@ namespace ahuRegulator
             // wnętrze funkcji dowolnie zmieniane przez studenta
 
 
-            // przykład odczytu danych wejściowych
-            double t_zad = DaneWejsciowe.Czytaj(eZmienne.TempZadana_C);
-            double t_pom = DaneWejsciowe.Czytaj(eZmienne.TempPomieszczenia_C);
-            bool boStart = DaneWejsciowe.Czytaj(eZmienne.PracaCentrali) > 0;
-            
-            
+            // Odczyt danych wejsciowych
+            double t_zad = DaneWejsciowe.Czytaj(eZmienne.TempZadana_C);                                                     //temperatura zadana
+            double t_pom = DaneWejsciowe.Czytaj(eZmienne.TempPomieszczenia_C);                                              //temperatura pomieszczenia
+            double t_cz = DaneWejsciowe.Czytaj(eZmienne.TempCzerpni_C);                                                     //temperatura czerpni
+            double t_wyrz = DaneWejsciowe.Czytaj(eZmienne.TempWyrzutni_C);                                                  //temperatura wyrzutni
+            double t_naw = DaneWejsciowe.Czytaj(eZmienne.TempNawiewu_C);                                                    //temperatura nawiewu
+            double t_wyw = DaneWejsciowe.Czytaj(eZmienne.TempWywiewu_C);                                                    //temperatura wywiewu
+
+            bool boStart = DaneWejsciowe.Czytaj(eZmienne.PracaCentrali) > 0;                                                //sygnal startu
+            bool procedura_nagrzewnica = DaneWejsciowe.Czytaj(eZmienne.TermostatPZamrNagrzewnicyWodnej) > 0;                //termostat nagrzewnicy wodnej
+
 
             // algorytm sterowania
             double y_nagrz = 0;
-            
             bool boPracaWentylatoraNawiewu = false;
+
+
+
+            if (procedura_nagrzewnica && StanPracyCentrali != eStanyPracyCentrali.AlarmNagrzewnicy) //zabezpieczenie zeby nie skakać miedzy dwoma stanami non stop
+            {
+                StanPracyCentrali = eStanyPracyCentrali.AlarmNagrzewnicy;
+                czas_od_zaniku_nagrz = 0;
+            }
 
 
 
@@ -127,10 +143,18 @@ namespace ahuRegulator
                 case eStanyPracyCentrali.Stop:
                     {
                         y_nagrz = 0;
+                        DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
                         boPracaWentylatoraNawiewu = false;
-                        if(boStart)
+                        if(!boStart)
                         {
+                            wymagany_reset = false;
+                        }
+
+                        if(boStart & !wymagany_reset)
+                        {
+                            CzasOdStartu = 0;
                             StanPracyCentrali = eStanyPracyCentrali.RozruchWentylatora;
+                           
                         }
                         break;
                     }
@@ -184,6 +208,44 @@ namespace ahuRegulator
                         }
 
                         break;
+                    }
+
+                case eStanyPracyCentrali.AlarmNagrzewnicy:
+                    {
+
+                        wymagany_reset = true;
+
+                        if (procedura_nagrzewnica)
+                        {
+                            y_nagrz = 100;
+                            boPracaWentylatoraNawiewu = false;
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1);
+                            czas_od_zaniku_nagrz = 0;
+                            procedura_nagrz_trwa = true;
+                        }
+                        else
+                        {
+
+                            if(procedura_nagrz_trwa)
+                            {
+                                czas_od_zaniku_nagrz += Ts;
+                                    
+                                if (czas_od_zaniku_nagrz > 5)
+                                {
+                                    procedura_nagrz_trwa = false;
+                                    StanPracyCentrali = eStanyPracyCentrali.Stop;
+
+                                }
+
+                            }
+
+                            y_nagrz = 100;
+                            boPracaWentylatoraNawiewu = false;
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1);
+
+                        }
+
+                            break;
                     }
 
 
