@@ -227,7 +227,7 @@ namespace ahuRegulator
                             if (t_pom < t_zad - DeadbandTemp)
                             {
                                 // Pomieszczenie jest za zimne, potrzebne grzanie
-                                if (t_cz < TempOdzyskCieplaThreshold && t_wyw > t_cz) // Sprawdź warunki dla odzysku ciepła
+                                if (t_pom < TempOdzyskCieplaThreshold && t_wyw > t_cz) // Sprawdź warunki dla odzysku ciepła
                                 {
                                     TypPracyCentrali = eStanyPracyCentrali.Praca_odzyskciepla;
                                 }
@@ -257,12 +257,11 @@ namespace ahuRegulator
                             {
                                 case eStanyPracyCentrali.Praca_jalowa:
                                     {
-                                        
+                                        // Praca jałowa: brak grzania/chłodzenia, pełne otwarcie bypassu
                                         y_nagrz = 0;
                                         y_chlodnica = 0;
-                                        y_bypass = 1; 
+                                        y_bypass = 100; // Pełne otwarcie bypassu (0-100%)
                                         DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0); // Pompa wyłączona
-
                                         break;
                                     }
                                 case eStanyPracyCentrali.Praca_grzanie:
@@ -270,21 +269,24 @@ namespace ahuRegulator
 
                                         t_naw_zad = RegPI.Wyjscie(t_zad - t_pom);
 
-
+                                        // Ograniczenie temperatury zadanej nawiewu dla grzania (np. 15-40 C)
                                         t_naw_zad = Math.Max(TempGrzania, Math.Min(40, t_naw_zad));
 
-
+                                        // Regulator podrzędny (RegPI2) reguluje temperaturę nawiewu (t_naw) do zadanej (t_naw_zad)
+                                        // i steruje nagrzewnicą (y_nagrz).
                                         y_nagrz = RegPI2.Wyjscie(t_naw_zad - t_naw);
-                                        //y_nagrz = Math.Max(0, Math.Min(1, y_nagrz)); // Ogranicz wyjście do zakresu 0-1
+                                        y_nagrz = Math.Max(0, Math.Min(100, y_nagrz)); // Ogranicz wyjście do zakresu 0-100
 
-                                        y_chlodnica = 0; 
-                                        y_bypass = 0;   
+                                        y_chlodnica = 0; // Chłodnica wyłączona
+                                        y_bypass = 0;    // Bypass zamknięty
                                         DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1); // Pompa włączona
                                         break;
                                     }
                                 case eStanyPracyCentrali.Praca_chlodzenie:
                                     {
-
+                                        // Kaskadowa regulacja chłodzenia
+                                        // Regulator nadrzędny (RegPI) reguluje temperaturę pomieszczenia (t_pom) do zadanej (t_zad)
+                                        // i wyznacza zadaną temperaturę nawiewu (t_naw_zad).
                                         t_naw_zad = RegPI.Wyjscie(t_zad - t_pom);
 
                                         // Ograniczenie temperatury zadanej nawiewu dla chłodzenia (np. 12-30 C)
@@ -292,8 +294,9 @@ namespace ahuRegulator
 
                                         // Regulator podrzędny (RegPI2) reguluje temperaturę nawiewu (t_naw) do zadanej (t_naw_zad)
                                         // i steruje chłodnicą (y_chlodnica).
+                                        // Wyjście regulatora jest już w zakresie -100 do 100, więc nie dzielimy przez 100.0
                                         y_chlodnica = RegPI2.Wyjscie(t_naw_zad - t_naw);
-                                        //y_chlodnica = Math.Max(0, Math.Min(1, y_chlodnica)); // Ogranicz wyjście do zakresu 0-1
+                                        y_chlodnica = Math.Max(0, Math.Min(100, y_chlodnica)); // Ogranicz wyjście do zakresu 0-100
 
                                         y_nagrz = 0; // Nagrzewnica wyłączona
                                         y_bypass = 0;    // Bypass zamknięty
@@ -302,16 +305,23 @@ namespace ahuRegulator
                                     }
                                 case eStanyPracyCentrali.Praca_odzyskciepla:
                                     {
-
+                                        // Kaskadowa regulacja odzysku ciepła
+                                        // Regulator nadrzędny (RegPI) reguluje temperaturę pomieszczenia (t_pom) do zadanej (t_zad)
+                                        // i wyznacza zadaną temperaturę nawiewu (t_naw_zad).
                                         t_naw_zad = RegPI.Wyjscie(t_zad - t_pom);
 
                                         // Ograniczenie temperatury zadanej nawiewu dla odzysku ciepła
                                         t_naw_zad = Math.Max(TempGrzania, Math.Min(40, t_naw_zad));
 
-
+                                        // Regulator podrzędny (RegPI2) reguluje temperaturę nawiewu (t_naw) do zadanej (t_naw_zad)
+                                        // i steruje bypassem (y_bypass).
+                                        // y_bypass = 0 oznacza pełen odzysk (bypass zamknięty), y_bypass = 100 oznacza pełen bypass (brak odzysku).
+                                        // Jeśli potrzebujemy więcej ciepła (t_naw_zad > t_naw), wyjście RegPI2 będzie rosło.
+                                        // Chcemy, aby y_bypass malał, więc odwracamy sygnał.
+                                        // Wyjście regulatora jest już w zakresie -100 do 100, więc nie dzielimy przez 100.0
                                         double bypass_raw_output = RegPI2.Wyjscie(t_naw_zad - t_naw);
-                                        //y_bypass = 100 - bypass_raw_output; // Odwrócenie sygnału dla sterowania bypassem
-                                        y_bypass = Math.Max(0, Math.Min(100, bypass_raw_output)); // Ogranicz wyjście do zakresu 0-1
+                                        y_bypass = 100 - bypass_raw_output; // Odwrócenie sygnału dla sterowania bypassem (skala 0-100)
+                                        y_bypass = Math.Max(0, Math.Min(100, y_bypass)); // Ogranicz wyjście do zakresu 0-100
 
                                         y_nagrz = 0;     // Nagrzewnica wyłączona
                                         y_chlodnica = 0; // Chłodnica wyłączona
@@ -320,16 +330,23 @@ namespace ahuRegulator
                                     }
                                 case eStanyPracyCentrali.Praca_odzyskchlodu:
                                     {
-
+                                        // Kaskadowa regulacja odzysku chłodu
+                                        // Regulator nadrzędny (RegPI) reguluje temperaturę pomieszczenia (t_pom) do zadanej (t_zad)
+                                        // i wyznacza zadaną temperaturę nawiewu (t_naw_zad).
                                         t_naw_zad = RegPI.Wyjscie(t_zad - t_pom);
 
                                         // Ograniczenie temperatury zadanej nawiewu dla odzysku chłodu
                                         t_naw_zad = Math.Min(TempChlodzenia, Math.Max(12, t_naw_zad));
 
-
+                                        // Regulator podrzędny (RegPI2) reguluje temperaturę nawiewu (t_naw) do zadanej (t_naw_zad)
+                                        // i steruje bypassem (y_bypass).
+                                        // y_bypass = 0 oznacza pełen odzysk (bypass zamknięty), y_bypass = 100 oznacza pełen bypass (brak odzysku).
+                                        // Jeśli potrzebujemy więcej chłodu (t_naw_zad < t_naw), wyjście RegPI2 będzie rosło (lub zmieniało się w kierunku "chłodzenia").
+                                        // Chcemy, aby y_bypass malał, więc odwracamy sygnał.
+                                        // Wyjście regulatora jest już w zakresie -100 do 100, więc nie dzielimy przez 100.0
                                         double bypass_raw_output = RegPI2.Wyjscie(t_naw_zad - t_naw);
-                                        y_bypass = 1 - bypass_raw_output; // Odwrócenie sygnału dla sterowania bypassem
-                                        //y_bypass = Math.Max(0, Math.Min(1, y_bypass)); // Ogranicz wyjście do zakresu 0-1
+                                        y_bypass = 100 - bypass_raw_output; // Odwrócenie sygnału dla sterowania bypassem (skala 0-100)
+                                        y_bypass = Math.Max(0, Math.Min(100, y_bypass)); // Ogranicz wyjście do zakresu 0-100
 
                                         y_nagrz = 0;     // Nagrzewnica wyłączona
                                         y_chlodnica = 0; // Chłodnica wyłączona
