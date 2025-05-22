@@ -13,16 +13,42 @@ namespace ahuRegulator
     class cRegulatorPI
     {
         double Ts = 1;  
+        
+        //Watunki poczatkowe calki 
         public double calka = 0;
-
+        
+        //Wzmocnienia regulatora
         public double kp = 1;
         public double ki = 0;
+
+        //Ograniczenia wyjscia - np. w procentach
+        public double u_max = 100;
+        public double u_min = -100;
 
 
         public double Wyjscie(double Uchyb)
         {
+           // Wartosc calki to calka z podzedniej chwili + uchyb * czas trwania tego uchybu
             calka = calka + Uchyb * Ts;
-            return kp * Uchyb + ki * calka/60;
+           
+            //Obliczenie sygnalu sterujacego regulatora i przeliczenie zeby bylo w minutach
+            double u = kp * Uchyb + ki * calka/60;
+
+            //Antiwindup
+            if (u > u_max)
+            {
+                calka = ((u_max - kp * Uchyb) * 60) / ki;
+                u = u_max;
+            }
+            else if (u < u_min)
+            {
+                calka = ((u_min - kp * Uchyb) * 60) / ki;
+                u = u_min;
+            }
+            
+            //Wyjscie sygnalu sterujacego
+            return u;
+
         }
 
 
