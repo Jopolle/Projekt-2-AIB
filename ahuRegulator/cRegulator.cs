@@ -152,7 +152,7 @@ namespace ahuRegulator
 
 
             RegPI2.kp = 2;
-            //RegPI2.ki = 1;
+            RegPI2.ki = .1;
 
 
 
@@ -236,7 +236,7 @@ namespace ahuRegulator
                         else
                         {
 
-                            t_naw_zad = Math.Max(10, Math.Min(40, RegPI.Wyjscie(t_zad - t_pom) + 30));
+                            t_naw_zad = Math.Max(10, Math.Min(40, RegPI.Wyjscie(t_zad - t_pom)+t_zad));
 
 
 
@@ -247,14 +247,13 @@ namespace ahuRegulator
 
 
 
-                            if (regPI2_raw_output > 0 && regPI2_raw_output <= 30)// &&
-                                                                                 // t_zad > TempOdzyskCieplaThreshold && t_cz > TempOdzyskCieplaThreshold)
+                            if (regPI2_raw_output > 0 && regPI2_raw_output <= 30 && t_cz > t_zad)// &&  t_zad > TempOdzyskCieplaThreshold && t_cz > TempOdzyskCieplaThreshold)
                             {
                                 TypPracyCentrali = eStanyPracyCentrali.Praca_odzyskciepla;
                             }
                             // 2. Priorytet dla silnego grzania
                             // Zakres: poniżej -30 (np. [-100, -30)) dla regPI2_raw_output
-                            else if (regPI2_raw_output > 30)
+                            else if (regPI2_raw_output > 0)
                             {
                                 TypPracyCentrali = eStanyPracyCentrali.Praca_grzanie;
                             }
@@ -266,7 +265,7 @@ namespace ahuRegulator
                             }
                             // 4. Priorytet dla odzysku chłodu
                             // Zakres: (0, 30] dla regPI2_raw_output
-                            else if (regPI2_raw_output < 0 && regPI2_raw_output >= -30)
+                            else if (regPI2_raw_output < 0 && regPI2_raw_output >= -30 && t_cz < t_zad)
                             {
                                 TypPracyCentrali = eStanyPracyCentrali.Praca_odzyskchlodu;
                             }
