@@ -68,7 +68,15 @@ namespace ahuRegulator
         Praca = 1,
         RozruchWentylatora = 2,
         WychladzanieNagrzewnicy = 3,
-        AlarmNagrzewnicy = 4
+        AlarmNagrzewnicy = 4,
+        ProceduraPrzeciwzamrozeniowa = 5,
+
+        //te będą zagnieżdżone
+        Praca_odzyskciepla = 6,
+        Praca_odzyskchlodu = 7,
+        Praca_grzanie = 8,
+        Praca_chlodzenie = 9,
+        Praca_jalowa = 10
 
     }
 
@@ -90,12 +98,16 @@ namespace ahuRegulator
 
 
         eStanyPracyCentrali StanPracyCentrali = eStanyPracyCentrali.Stop;
-
+        eStanyPracyCentrali TypPracyCentrali = eStanyPracyCentrali.Stop;
 
         double CzasOdStartu = 0;
         double CzasOdStopu = 0;
         double OpoznienieZalaczeniaNagrzewnicy_s = 10;
         double OpoznienieWylaczeniaWentylatora_s = 15;
+
+        double TempChlodzenia = 30;
+        double TempGrzania = 15;
+
 
         // ***************************************************
 
@@ -164,6 +176,7 @@ namespace ahuRegulator
                         else
                         {
                             y_nagrz = RegPI.Wyjscie(t_zad - t_pom);
+                            //if()
                         }
                         
                         break;
@@ -185,7 +198,9 @@ namespace ahuRegulator
 
                         break;
                     }
-
+                case eStanyPracyCentrali.ProceduraPrzeciwzamrozeniowa:
+                    break;
+                
 
 
             }
