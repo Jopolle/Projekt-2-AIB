@@ -26,6 +26,11 @@ namespace ahuRegulator
         public double u_max = 100;
         public double u_min = -100;
 
+        public cRegulatorPI(double kp1, double ki1)
+        {
+            kp = kp1;
+            ki = ki1;
+        }
         public void Reset()
         {
             calka = 0;
@@ -40,18 +45,21 @@ namespace ahuRegulator
             //Obliczenie sygnalu sterujacego regulatora i przeliczenie zeby bylo w minutach
             double u = kp * Uchyb + ki * calka / 60;
 
-            //Antiwindup
-            if (u > u_max)
-            {
-                calka = ((u_max - kp * Uchyb) * 60) / ki;
-                u = u_max;
-            }
-            else if (u < u_min)
-            {
-                calka = ((u_min - kp * Uchyb) * 60) / ki;
-                u = u_min;
-            }
 
+            //Antywindup tylko jeżeli jest człon całkujący
+            if (ki != 0)
+            {
+                if (u > u_max)
+                {
+                    calka = ((u_max - kp * Uchyb) * 60) / ki;
+                    u = u_max;
+                }
+                else if (u < u_min)
+                {
+                    calka = ((u_min - kp * Uchyb) * 60) / ki;
+                    u = u_min;
+                }
+            }
             //Wyjscie sygnalu sterujacego
             return u;
 
@@ -96,9 +104,11 @@ namespace ahuRegulator
         // ********* zmienne definiowane przez studenta
 
         //Tworzenie obiektów regulatorów 
-        cRegulatorPI RegPI = new cRegulatorPI();
-        cRegulatorPI RegPI2 = new cRegulatorPI();
+        cRegulatorPI RegPI = new cRegulatorPI(2, 0.05);
+        cRegulatorPI RegPI2 = new cRegulatorPI(1, 0.2);
        
+
+
 
         //Procedury przeciwzamrożeniowe 
         bool wymagany_reset = false;        //Wymuszenie ponownego zalaczenia pracy 
@@ -171,8 +181,7 @@ namespace ahuRegulator
             bool procedura_presostat = ((DaneWejsciowe.Czytaj(eZmienne.PresostatWentylatoraNawiewu)) > 0) || ((DaneWejsciowe.Czytaj(eZmienne.PresostatWentylatoraWywiewu)) > 0);        //zadzialanie presostatu nawiewu/wywiewu
 
 
-            RegPI2.kp = 2;
-            RegPI2.ki = .1;
+
 
 
             // algorytm sterowania
@@ -209,7 +218,8 @@ namespace ahuRegulator
                 case eStanyPracyCentrali.Stop:
                     {
                         y_nagrz = 0;
-                        DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
+                        boPompaNagrzewnicy = 0;
+                        boPompaChlodnicy = 0;
                         boPracaWentylatoraNawiewu = false;
                         boPracaWentylatoraWywiewu = false;
                         RegPI.Reset();
@@ -328,7 +338,7 @@ namespace ahuRegulator
                                 case eStanyPracyCentrali.Praca_odzyskciepla:
                                     {
 
-                                        y_bypass = Mapuj(regPI2_raw_output, 0, 30, 0, 100);
+                                        y_bypass = 100 - Mapuj(regPI2_raw_output, 0, 30, 0, 100);
                                         y_nagrz = 0;
                                         y_chlodnica = 0;
                                         boPompaNagrzewnicy = 0;
@@ -337,7 +347,7 @@ namespace ahuRegulator
                                     }
                                 case eStanyPracyCentrali.Praca_odzyskchlodu:
                                     {
-                                        y_bypass = Mapuj(regPI2_raw_output, -30, 0, 0, 100);
+                                        y_bypass = 100 - Mapuj(regPI2_raw_output, -30, 0, 0, 100);
                                         y_nagrz = 0;
                                         y_chlodnica = 0;
                                         
