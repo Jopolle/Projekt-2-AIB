@@ -94,6 +94,7 @@ namespace ahuRegulator
         cRegulatorPI RegPI = new cRegulatorPI();
         cRegulatorPI RegPI2 = new cRegulatorPI();
 
+
         //Procedury przeciwzamrożeniowe 
         bool wymagany_reset = false;        //Wymuszenie ponownego zalaczenia pracy 
 
@@ -130,6 +131,13 @@ namespace ahuRegulator
         double RegulatorOutputThreshold = 5;
 
 
+
+        double DeadbandTemp = 0.5; // Martwa strefa dla temperatury pomieszczenia (w stopniach Celsjusza)
+        double TempOdzyskCieplaThreshold = 10; // Temperatura czerpni poniżej której rozważamy odzysk ciepła
+        double TempOdzyskChloduThreshold = 20;
+        double RegulatorOutputThreshold = 5;
+
+
         // ***************************************************
 
         /// <summary>
@@ -151,6 +159,7 @@ namespace ahuRegulator
             double t_wyw = DaneWejsciowe.Czytaj(eZmienne.TempWywiewu_C);                                                    //temperatura wywiewu
 
 
+
             bool boStart = DaneWejsciowe.Czytaj(eZmienne.PracaCentrali) > 0;                                                //sygnal startu
             bool procedura_nagrzewnica = DaneWejsciowe.Czytaj(eZmienne.TermostatPZamrNagrzewnicyWodnej) > 0;                //termostat nagrzewnicy wodnej
             bool procedura_wymiennik = DaneWejsciowe.Czytaj(eZmienne.TempZaOdzyskiem_C) < 5;                                //zabezpieczenie wymmienika krzyzowego
@@ -165,11 +174,16 @@ namespace ahuRegulator
             double y_nagrz = 0;
             double y_bypass = 0;
             double y_chlodnica = 0;
+
             bool boPracaWentylatoraNawiewu = false;
             bool boPracaWentylatoraWywiewu = false;
             double t_naw_zad = 20;
 
 
+            bool boPracaWentylatoraNawiewu = false;
+            bool boPracaWentylatoraWywiewu = false;
+
+            double t_naw_zad = 20;
 
             if (procedura_presostat && StanPracyCentrali != eStanyPracyCentrali.AlarmPresostatu)
             {
@@ -244,8 +258,10 @@ namespace ahuRegulator
                         else
                         {
 
+
                             t_naw_zad = Math.Max(10, Math.Min(40, RegPI.Wyjscie(t_zad - t_pom) + t_zad));
                             double regPI2_raw_output = RegPI2.Wyjscie(t_naw_zad - t_naw);
+
 
 
                             if (regPI2_raw_output > 0 && regPI2_raw_output <= 30 && t_cz > t_zad)// &&  t_zad > TempOdzyskCieplaThreshold && t_cz > TempOdzyskCieplaThreshold)
@@ -373,6 +389,7 @@ namespace ahuRegulator
                         {
                             y_nagrz = 100;
                             boPracaWentylatoraNawiewu = false;
+                            boPracaWentylatoraWywiewu = false;
                             DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1);
                             czas_od_zaniku_nagrz = 0;
                             procedura_nagrz_trwa = true;
@@ -395,6 +412,7 @@ namespace ahuRegulator
 
                             y_nagrz = 100;
                             boPracaWentylatoraNawiewu = false;
+                            boPracaWentylatoraWywiewu = false;
                             DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 1);
 
                         }
@@ -407,6 +425,7 @@ namespace ahuRegulator
 
                         if (procedura_wymiennik)
                         {
+
 
                             y_bypass = 100;
                             DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, 0);
@@ -442,6 +461,7 @@ namespace ahuRegulator
                         break;
 
 
+
                     }
                 case eStanyPracyCentrali.AlarmPresostatu:
                     {
@@ -460,6 +480,7 @@ namespace ahuRegulator
                         }
                         else
                         {
+
 
                             if (procedura_pres_trwa)
                             {
