@@ -142,6 +142,11 @@ namespace ahuRegulator
 
         double t_naw_zad = 20;
 
+
+
+
+        double dolne_ogr = 10;
+        double gorne_ogr = 40;
         
 
 
@@ -257,14 +262,15 @@ namespace ahuRegulator
                             y_nagrz = 0;
                             y_chlodnica = 0;
                             y_bypass = 0;
-                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
+                            boPompaChlodnicy = 0;
+                            boPompaNagrzewnicy = 0;
                             StanPracyCentrali = eStanyPracyCentrali.WychladzanieNagrzewnicy;
                         }
                         else
                         {
 
 
-                            t_naw_zad = Math.Max(10, Math.Min(40, RegPI.Wyjscie(t_zad - t_pom) + t_zad));
+                            t_naw_zad = Math.Max(dolne_ogr, Math.Min(gorne_ogr, RegPI.Wyjscie(t_zad - t_pom) + t_zad));
                             double regPI2_raw_output = RegPI2.Wyjscie(t_naw_zad - t_naw);
 
 
