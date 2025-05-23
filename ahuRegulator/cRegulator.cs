@@ -142,14 +142,6 @@ namespace ahuRegulator
 
         double t_naw_zad = 20;
 
-        double TempChlodzenia = 30;
-        double TempGrzania = 15;
-
-        double DeadbandTemp = 0.5; // Martwa strefa dla temperatury pomieszczenia (w stopniach Celsjusza)
-        double TempOdzyskCieplaThreshold = 10; // Temperatura czerpni poniżej której rozważamy odzysk ciepła
-        double TempOdzyskChloduThreshold = 20;
-        double RegulatorOutputThreshold = 5;
-
         
 
 
@@ -179,9 +171,6 @@ namespace ahuRegulator
             bool procedura_nagrzewnica = DaneWejsciowe.Czytaj(eZmienne.TermostatPZamrNagrzewnicyWodnej) > 0;                //termostat nagrzewnicy wodnej
             bool procedura_wymiennik = DaneWejsciowe.Czytaj(eZmienne.TempZaOdzyskiem_C) < 5;                                //zabezpieczenie wymmienika krzyzowego
             bool procedura_presostat = ((DaneWejsciowe.Czytaj(eZmienne.PresostatWentylatoraNawiewu)) > 0) || ((DaneWejsciowe.Czytaj(eZmienne.PresostatWentylatoraWywiewu)) > 0);        //zadzialanie presostatu nawiewu/wywiewu
-
-
-
 
 
             // algorytm sterowania
@@ -552,7 +541,6 @@ namespace ahuRegulator
             fm.t2 = OpoznienieWylaczeniaWentylatora_s;
             fm.kp2 = RegPI2.kp;
             fm.ki2 = RegPI2.ki;
-            fm.naw_temp = t_naw_zad;
 
 
             if (fm.ShowDialog() == System.Windows.Forms.DialogResult.OK)
@@ -563,7 +551,6 @@ namespace ahuRegulator
                 RegPI2.kp = fm.kp2;
                 RegPI2.ki = fm.ki2;
 
-                t_naw_zad = fm.naw_temp;
 
 
                 OpoznienieZalaczeniaNagrzewnicy_s = fm.t1;

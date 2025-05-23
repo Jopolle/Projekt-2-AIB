@@ -33,7 +33,7 @@ namespace ahuRegulator
             edT2.Text = t2.ToString();
             textBox1.Text = ki2.ToString();
             textBox2.Text = kp2.ToString();
-            textBox3.Text = naw_temp.ToString();
+
 
 
         }
@@ -48,7 +48,7 @@ namespace ahuRegulator
                 t2 = Convert.ToDouble(edT2.Text);
                 kp2 = Convert.ToDouble(textBox2.Text);
                 ki2 = Convert.ToDouble(textBox1.Text);
-                naw_temp = Convert.ToDouble(textBox3.Text);
+
                 Close();
                 DialogResult = DialogResult.OK;
             }
