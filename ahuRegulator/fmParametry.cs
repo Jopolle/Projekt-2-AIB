@@ -16,6 +16,9 @@ namespace ahuRegulator
         public double ki;
         public double t1;
         public double t2;
+        public double kp2;
+        public double ki2;
+        public double naw_temp;
 
         public fmParametry()
         {
@@ -28,6 +31,11 @@ namespace ahuRegulator
             edKi.Text = ki.ToString();
             edT1.Text = t1.ToString();
             edT2.Text = t2.ToString();
+            textBox1.Text = ki2.ToString();
+            textBox2.Text = kp2.ToString();
+            textBox3.Text = naw_temp.ToString();
+
+
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -38,6 +46,9 @@ namespace ahuRegulator
                 ki = Convert.ToDouble(edKi.Text);
                 t1 = Convert.ToDouble(edT1.Text);
                 t2 = Convert.ToDouble(edT2.Text);
+                kp2 = Convert.ToDouble(textBox2.Text);
+                ki2 = Convert.ToDouble(textBox1.Text);
+                naw_temp = Convert.ToDouble(textBox3.Text);
                 Close();
                 DialogResult = DialogResult.OK;
             }
@@ -58,6 +69,16 @@ namespace ahuRegulator
         private void fmParametry_Load(object sender, EventArgs e)
         {
             UstawKontrolki();
+        }
+
+        private void groupBox1_Enter(object sender, EventArgs e)
+        {
+
+        }
+
+        private void edT2_TextChanged(object sender, EventArgs e)
+        {
+
         }
     }
 }
