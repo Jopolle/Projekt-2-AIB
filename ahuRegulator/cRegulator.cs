@@ -66,10 +66,7 @@ namespace ahuRegulator
         RozruchWentylatora = 2,
         WychladzanieNagrzewnicy = 3,
         AlarmNagrzewnicy = 4,
-
         AlarmWymiennika = 5,
-
-
 
         //te będą zagnieżdżone
         Praca_odzyskciepla = 6,
@@ -77,11 +74,9 @@ namespace ahuRegulator
         Praca_grzanie = 8,
         Praca_chlodzenie = 9,
         Praca_jalowa = 10,
-        ProceduraPrzeciwzamrozeniowa = 11
-
+        AlarmPresostatu = 11
 
     }
-
 
 
     public class cRegulator
@@ -95,18 +90,27 @@ namespace ahuRegulator
 
         // ********* zmienne definiowane przez studenta
 
+        //Tworzenie obiektów regulatorów 
         cRegulatorPI RegPI = new cRegulatorPI();
         cRegulatorPI RegPI2 = new cRegulatorPI();
 
 
-
-
-
-        bool wymagany_reset = false;
+        //Procedury przeciwzamrożeniowe 
+        bool wymagany_reset = false;        //Wymuszenie ponownego zalaczenia pracy 
 
         //Procedura przeciwzamrozeniowa nagrzewnicy wodnej
         double czas_od_zaniku_nagrz = 0;
         bool procedura_nagrz_trwa = false;
+
+        //Procedura przeciwzamrozeniowa wymmienika
+        double czas_od_zaniku_wym = 0;
+        bool procedura_wym_trwa = false;
+
+        //Procedura presostatu
+        double czas_od_zaniku_pres = 0;
+        bool procedura_pres_trwa = false;
+
+
 
 
 
@@ -120,6 +124,11 @@ namespace ahuRegulator
 
         double TempChlodzenia = 30;
         double TempGrzania = 15;
+
+        double DeadbandTemp = 0.5; // Martwa strefa dla temperatury pomieszczenia (w stopniach Celsjusza)
+        double TempOdzyskCieplaThreshold = 10; // Temperatura czerpni poniżej której rozważamy odzysk ciepła
+        double TempOdzyskChloduThreshold = 20;
+        double RegulatorOutputThreshold = 5;
 
 
 
@@ -151,14 +160,14 @@ namespace ahuRegulator
 
 
 
-            RegPI2.kp = 2;
-            RegPI2.ki = .1;
-
-
-
-
             bool boStart = DaneWejsciowe.Czytaj(eZmienne.PracaCentrali) > 0;                                                //sygnal startu
             bool procedura_nagrzewnica = DaneWejsciowe.Czytaj(eZmienne.TermostatPZamrNagrzewnicyWodnej) > 0;                //termostat nagrzewnicy wodnej
+            bool procedura_wymiennik = DaneWejsciowe.Czytaj(eZmienne.TempZaOdzyskiem_C) < 5;                                //zabezpieczenie wymmienika krzyzowego
+            bool procedura_presostat = ((DaneWejsciowe.Czytaj(eZmienne.PresostatWentylatoraNawiewu)) > 0) || ((DaneWejsciowe.Czytaj(eZmienne.PresostatWentylatoraWywiewu)) > 0);        //zadzialanie presostatu nawiewu/wywiewu
+
+
+            RegPI2.kp = 2;
+            RegPI2.ki = .1;
 
 
             // algorytm sterowania
@@ -168,15 +177,29 @@ namespace ahuRegulator
 
             bool boPracaWentylatoraNawiewu = false;
             bool boPracaWentylatoraWywiewu = false;
+            double t_naw_zad = 20;
+
+
+            bool boPracaWentylatoraNawiewu = false;
+            bool boPracaWentylatoraWywiewu = false;
 
             double t_naw_zad = 20;
 
-            if (procedura_nagrzewnica && StanPracyCentrali != eStanyPracyCentrali.AlarmNagrzewnicy) //zabezpieczenie zeby nie skakać miedzy dwoma stanami non stop
+            if (procedura_presostat && StanPracyCentrali != eStanyPracyCentrali.AlarmPresostatu)
+            {
+                StanPracyCentrali = eStanyPracyCentrali.AlarmPresostatu;
+                czas_od_zaniku_pres = 0;
+            }
+            else if (procedura_nagrzewnica && StanPracyCentrali != eStanyPracyCentrali.AlarmNagrzewnicy)
             {
                 StanPracyCentrali = eStanyPracyCentrali.AlarmNagrzewnicy;
                 czas_od_zaniku_nagrz = 0;
             }
-
+            else if (procedura_wymiennik && StanPracyCentrali != eStanyPracyCentrali.AlarmNagrzewnicy && StanPracyCentrali != eStanyPracyCentrali.AlarmWymiennika)
+            {
+                StanPracyCentrali = eStanyPracyCentrali.AlarmWymiennika;
+                czas_od_zaniku_wym = 0;
+            }
 
 
             switch (StanPracyCentrali)
@@ -216,7 +239,6 @@ namespace ahuRegulator
                             // y_nagrz = RegPI.Wyjscie(t_zad - t_pom);
                         }
 
-
                         break;
                     }
                 case eStanyPracyCentrali.Praca:
@@ -236,14 +258,9 @@ namespace ahuRegulator
                         else
                         {
 
-                            t_naw_zad = Math.Max(10, Math.Min(40, RegPI.Wyjscie(t_zad - t_pom)+t_zad));
 
-
-
+                            t_naw_zad = Math.Max(10, Math.Min(40, RegPI.Wyjscie(t_zad - t_pom) + t_zad));
                             double regPI2_raw_output = RegPI2.Wyjscie(t_naw_zad - t_naw);
-
-
-
 
 
 
@@ -275,9 +292,6 @@ namespace ahuRegulator
                             {
                                 TypPracyCentrali = eStanyPracyCentrali.Praca_jalowa;
                             }
-
-
-
 
                             System.Diagnostics.Debug.WriteLine("wyjscie reg2: " + regPI2_raw_output.ToString() + "    Wyjscie reg 1: " + t_naw_zad + "    Typ Pracy: " + TypPracyCentrali);
 
@@ -355,11 +369,21 @@ namespace ahuRegulator
                         break;
                     }
 
-
                 case eStanyPracyCentrali.AlarmNagrzewnicy:
                     {
 
                         wymagany_reset = true;
+
+                        //Dodatkowe sprawdzenie czy jednoczesnie nie wlaczyla sie ochrona wymiennika bo to ze soba nie koliduje
+                        if (procedura_wymiennik)
+                        {
+
+                            DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, 100);
+                        }
+                        else
+                        {
+                            DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, 0);
+                        }
 
                         if (procedura_nagrzewnica)
                         {
@@ -395,18 +419,94 @@ namespace ahuRegulator
 
                         break;
                     }
+                case eStanyPracyCentrali.AlarmWymiennika:
+                    {
+                        wymagany_reset = true;
 
-                case eStanyPracyCentrali.ProceduraPrzeciwzamrozeniowa:
-                    break;
+                        if (procedura_wymiennik)
+                        {
+
+
+                            y_bypass = 100;
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieChlodnicy_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZezwolenieNaPraceWentylatoraNawiewu, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
+
+                            czas_od_zaniku_wym = 0;
+                            procedura_wym_trwa = true;
+                        }
+                        else
+                        {
+
+                            if (procedura_wym_trwa)
+                            {
+                                czas_od_zaniku_wym += Ts;
+
+                                if (czas_od_zaniku_wym > 5)
+                                {
+                                    procedura_wym_trwa = false;
+                                    StanPracyCentrali = eStanyPracyCentrali.Stop;
+                                }
+                            }
+
+
+                            y_bypass = 100;
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieChlodnicy_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZezwolenieNaPraceWentylatoraNawiewu, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
+                        }
+
+                        break;
 
 
 
+                    }
+                case eStanyPracyCentrali.AlarmPresostatu:
+                    {
+                        wymagany_reset = true;
 
+                        if (procedura_presostat)
+                        {
+
+                            y_bypass = 0;
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieChlodnicy_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZezwolenieNaPraceWentylatoraNawiewu, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
+                            czas_od_zaniku_pres = 0;
+                            procedura_pres_trwa = true;
+                        }
+                        else
+                        {
+
+
+                            if (procedura_pres_trwa)
+                            {
+                                czas_od_zaniku_pres += Ts;
+
+                                if (czas_od_zaniku_pres > 5)
+                                {
+                                    procedura_pres_trwa = false;
+                                    StanPracyCentrali = eStanyPracyCentrali.Stop;
+                                }
+                            }
+
+
+                            y_bypass = 0;
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.WysterowanieChlodnicy_pr, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZezwolenieNaPraceWentylatoraNawiewu, 0);
+                            DaneWyjsciowe.Zapisz(eZmienne.ZalaczeniePompyNagrzewnicyWodnej1, 0);
+                        }
+
+                        break;
+
+                    }
 
             }
-
-
-
+            
             // ustawienie wyjść
             DaneWyjsciowe.Zapisz(eZmienne.WysterowanieNagrzewnicy1_pr, y_nagrz);
             DaneWyjsciowe.Zapisz(eZmienne.Wysterowanie_bypass_pr, y_bypass);
@@ -426,10 +526,6 @@ namespace ahuRegulator
             return (value - inMin) / (inMax - inMin) * (outMax - outMin) + outMin;
         }
 
-
-
-
-
         /// <summary>
         /// wywołanie formularza z parametrami
         /// </summary>
@@ -439,7 +535,6 @@ namespace ahuRegulator
             fmParametry fm = new fmParametry();
             fm.kp = RegPI.kp;
             fm.ki = RegPI.ki;
-
             fm.t1 = OpoznienieZalaczeniaNagrzewnicy_s;
             fm.t2 = OpoznienieWylaczeniaWentylatora_s;
 
